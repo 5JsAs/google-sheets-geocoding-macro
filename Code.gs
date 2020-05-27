@@ -28,6 +28,12 @@
 // https://mbrownnyc.wordpress.com/misc/iso-3166-cctld-csv/
 // http://www.convertcsv.com/csv-to-json.htm
 // to generate the functions for menu item handling.
+
+//
+// CHANGES:
+// may 26th, 2020: Modified by Jose Marin to include latlongToAltitude function
+//
+
 /*
 var REGIONS = {
   "Afghanistan": "af",
@@ -294,10 +300,8 @@ function setGeocodingRegion(region) {
   PropertiesService.getDocumentProperties().setProperty('GEOCODING_REGION', region);
   updateMenu();
 }
-
 function promptForGeocodingRegion() {
   var ui = SpreadsheetApp.getUi();
-
   var result = ui.prompt(
     'Set the Geocoding Country Code (currently: ' + getGeocodingRegion() + ')',
     'Enter the 2-letter country code (ccTLD) that you would like ' +
@@ -306,7 +310,6 @@ function promptForGeocodingRegion() {
     'For more country codes, see: https://en.wikipedia.org/wiki/Country_code_top-level_domain',
     ui.ButtonSet.OK_CANCEL
   );
-
   // Process the user's response.
   if (result.getSelectedButton() == ui.Button.OK) {
     setGeocodingRegion(result.getResponseText());
@@ -418,6 +421,40 @@ function positionToAddress() {
   }
 };
 
+function positionToAltitude() {
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var cells = sheet.getActiveRange();
+
+  var popup = SpreadsheetApp.getUi();
+  
+  // Must have selected at least 3 columns (Lat, Lng, Alt).
+  // Must have selected at least 1 row.
+
+  var columnCount = cells.getNumColumns();
+
+  if (columnCount < 3) {
+    popup.alert("Select at least 3 columns: Latitude, Longitude in the first 2 columns; the altitude will go into the last column.");
+    return;
+  }
+  var cellsValues = cells.getValues(); // two-dimensional array (indexed by rows) of lat,long points.
+  var altitudeRow;
+  var altitudeColumn = columnCount;
+  var dataAltitude = Maps.newElevationSampler();
+  var location;
+  
+  for (altitudeRow = 0; altitudeRow < cellsValues.length; altitudeRow++) {
+    var lat = cellsValues[altitudeRow][0]; 
+    var lng = cellsValues[altitudeRow][1]; 
+
+    // Geocode the lat, lng pair to an altitude.
+    location = dataAltitude.sampleLocation(lat, lng);
+    // Only change cells if geocoder seems to have gotten a valid response.
+    if (location.status === 'OK') {
+      cells.getCell(altitudeRow+1, altitudeColumn).setValue(location.results[0].elevation);
+    }
+  }
+};
+
 function generateMenu() {
   // var setGeocodingRegionMenuItem = 'Set Geocoding Region (Currently: ' + getGeocodingRegion() + ')';
   
@@ -433,6 +470,10 @@ function generateMenu() {
   {
     name: "Geocode Selected Cells (Latitude, Longitude to Address)",
     functionName: "positionToAddress"
+  },
+  {
+    name: "Geocode Selected Cells (Latitude, Longitude to Altitude)",
+    functionName: "positionToAltitude"
   }];
   
   return entries;
